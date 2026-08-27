@@ -20,6 +20,8 @@ type Toast = {
   message: string;
 };
 
+type Theme = "dark" | "light";
+
 const suggestions = [
   { label: "بحث آمن", value: "https://duckduckgo.com" },
   { label: "أخبار التقنية", value: "https://www.theverge.com" },
@@ -84,6 +86,13 @@ function App() {
   const [isVpnPanelOpen, setIsVpnPanelOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      return localStorage.getItem("aakil-theme") === "light" ? "light" : "dark";
+    } catch {
+      return "dark";
+    }
+  });
   const [history, setHistory] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("aakil-history") || "[]");
@@ -106,6 +115,11 @@ function App() {
   useEffect(() => {
     setAddress(activeTab.url === "aakil://home" ? "" : activeTab.url);
   }, [activeTab.id, activeTab.url]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("aakil-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     localStorage.setItem("aakil-history", JSON.stringify(history.slice(0, 50)));
@@ -354,6 +368,10 @@ function App() {
               <span className={`private-toggle ${isPrivate ? "on" : ""}`} />
               {isPrivate ? "الوضع الخاص مفعّل" : "الوضع الخاص"}
             </button>
+            <button className="topbar-link theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={theme === "dark" ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}>
+              <span className="theme-icon">{theme === "dark" ? "☼" : "☾"}</span>
+              {theme === "dark" ? "نهاري" : "ليلي"}
+            </button>
             <button className="icon-button" onClick={() => showToast("مساعدة AAKIL", "هذه نسخة أولية من المتصفح مع حماية محلية افتراضية.")} aria-label="المساعدة">?</button>
             <button className="icon-button" onClick={() => setIsSettingsOpen(true)} aria-label="الإعدادات">⚙</button>
           </div>
@@ -448,6 +466,7 @@ function App() {
             <div className="modal-header"><div><span className="section-kicker">AAKIL</span><h2>الإعدادات</h2></div><button className="panel-dismiss" onClick={() => setIsSettingsOpen(false)}>×</button></div>
             <div className="settings-list">
               <div className="setting-row"><div><strong>الوضع الخاص</strong><span>لا تحفظ الزيارات الجديدة في السجل المحلي.</span></div><button className={`switch ${isPrivate ? "enabled" : ""}`} onClick={() => setIsPrivate((current) => !current)}><span /></button></div>
+              <div className="setting-row"><div><strong>مظهر AAKIL</strong><span>اختر بين الوضع النهاري والوضع الليلي.</span></div><button className="theme-choice" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}><span>{theme === "dark" ? "☾" : "☼"}</span>{theme === "dark" ? "ليلي" : "نهاري"}</button></div>
               <div className="setting-row"><div><strong>حالة VPN</strong><span>الوحدة الاختيارية غير مرتبطة حاليًا.</span></div><span className="setting-status">غير مفعّل</span></div>
               <div className="setting-row"><div><strong>بيانات التصفح</strong><span>يمسح السجل المحفوظ على هذا الجهاز فقط.</span></div><button className="danger-button" onClick={clearHistory}>مسح السجل</button></div>
             </div>
