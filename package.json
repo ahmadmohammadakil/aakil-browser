@@ -13,7 +13,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "electron:dev": "electron electron/main.cjs",
-    "electron:dist": "pnpm build && electron-builder --win nsis --publish never",
+    "electron:dist": "pnpm build && electron-builder --publish never",
     "tauri": "tauri"
   },
   "build": {
