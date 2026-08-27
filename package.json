@@ -1,7 +1,7 @@
 {
   "name": "aakil",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "AAKIL — متصفح شخصي عربي بواجهة RTL وخصوصية محلية.",
   "author": "AAKIL",
   "license": "UNLICENSED",
@@ -33,9 +33,22 @@
         {
           "target": "nsis",
           "arch": ["x64"]
+        },
+        {
+          "target": "msi",
+          "arch": ["x64"]
         }
       ],
       "artifactName": "AAKIL-${version}-Windows-x64-setup.${ext}"
+    },
+    "msi": {
+      "upgradeCode": "{9A4D9E5D-0F1B-4F1B-8A14-7E03C5F8C4D1}",
+      "oneClick": false,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AAKIL",
+      "runAfterFinish": true
     },
     "nsis": {
       "oneClick": false,
