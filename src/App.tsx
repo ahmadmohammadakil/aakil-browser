@@ -59,6 +59,22 @@ function getTitle(url: string) {
   return domain.length > 22 ? `${domain.slice(0, 22)}…` : domain;
 }
 
+function waitForWebview(view: Webview) {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve();
+    };
+    const timeout = window.setTimeout(() => finish(new Error("WebView creation timed out")), 15000);
+    void view.once("tauri://created", () => finish());
+    void view.once("tauri://error", (event) => finish(new Error(String(event.payload ?? "WebView creation failed"))));
+  });
+}
+
 function App() {
   const [tabs, setTabs] = useState<Tab[]>([initialTab]);
   const [activeId, setActiveId] = useState(1);
@@ -135,6 +151,7 @@ function App() {
         });
         (webview as Webview & { aakilUrl?: string }).aakilUrl = activeTab.url;
         nativeWebviews.current.set(activeTab.id, webview);
+        await waitForWebview(webview);
         await webview.setAutoResize(false);
         if (!cancelled) {
           await webview.show();
