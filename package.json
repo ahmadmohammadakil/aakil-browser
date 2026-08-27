@@ -1,27 +1,66 @@
 {
   "name": "aakil",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.2.0",
+  "description": "AAKIL — متصفح شخصي عربي بواجهة RTL وخصوصية محلية.",
+  "author": "AAKIL",
+  "license": "UNLICENSED",
   "type": "module",
   "packageManager": "pnpm@11.24.0",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "electron:dev": "electron electron/main.cjs",
+    "electron:dist": "pnpm build && electron-builder --win nsis",
     "tauri": "tauri"
   },
+  "build": {
+    "appId": "com.aakil.browser",
+    "productName": "AAKIL",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "AAKIL-${version}-Windows-x64-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AAKIL",
+      "deleteAppDataOnUninstall": false
+    }
+  },
   "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2"
+    "@tauri-apps/plugin-opener": "^2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4",
-    "@tauri-apps/cli": "^2"
+    "vite": "^7.0.4"
   }
 }

@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { Webview } from "@tauri-apps/api/webview";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+import type { BrowserBounds, BrowserEvent } from "./electron";
 import "./App.css";
 
 type Tab = {
@@ -13,6 +10,8 @@ type Tab = {
   icon: string;
   history: string[];
   historyIndex: number;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
 };
 
 type Toast = {
@@ -36,6 +35,8 @@ const initialTab: Tab = {
   icon: "A",
   history: ["aakil://home"],
   historyIndex: 0,
+  canGoBack: false,
+  canGoForward: false,
 };
 
 function normalizeUrl(value: string) {
@@ -59,22 +60,6 @@ function getTitle(url: string) {
   if (url === "aakil://home") return "صفحة البداية";
   const domain = getDomain(url);
   return domain.length > 22 ? `${domain.slice(0, 22)}…` : domain;
-}
-
-function waitForWebview(view: Webview) {
-  return new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const finish = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      if (error) reject(error);
-      else resolve();
-    };
-    const timeout = window.setTimeout(() => finish(new Error("WebView creation timed out")), 15000);
-    void view.once("tauri://created", () => finish());
-    void view.once("tauri://error", (event) => finish(new Error(String(event.payload ?? "WebView creation failed"))));
-  });
 }
 
 function App() {
@@ -103,8 +88,7 @@ function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [nativeWebviewFailed, setNativeWebviewFailed] = useState(false);
   const nativeHostRef = useRef<HTMLDivElement>(null);
-  const nativeWebviews = useRef<Map<number, Webview>>(new Map());
-  const isTauriRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  const isElectronRuntime = typeof window !== "undefined" && Boolean(window.aakil);
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeId) || tabs[0],
@@ -132,79 +116,70 @@ function App() {
   }, [toast]);
 
   useEffect(() => {
-    if (!isTauriRuntime || isHome) return;
-    let cancelled = false;
-    const syncNativeWebview = async () => {
-      const host = nativeHostRef.current;
-      if (!host) return;
-      try {
-        const current = nativeWebviews.current.get(activeTab.id);
-        for (const [id, view] of nativeWebviews.current) {
-          if (id !== activeTab.id) await view.hide();
-        }
-
-        const currentUrl = (current as (Webview & { aakilUrl?: string }) | undefined)?.aakilUrl;
-        if (current && currentUrl === activeTab.url && !cancelled) {
-          await current.show();
-          await current.setFocus();
-          return;
-        }
-
-        if (current) {
-          await current.close();
-          nativeWebviews.current.delete(activeTab.id);
-        }
-
-        const rect = host.getBoundingClientRect();
-        const webview = new Webview(getCurrentWebviewWindow(), `tab-${activeTab.id}`, {
-          url: activeTab.url,
-          x: rect.left,
-          y: rect.top,
-          width: Math.max(1, rect.width),
-          height: Math.max(1, rect.height),
-        });
-        (webview as Webview & { aakilUrl?: string }).aakilUrl = activeTab.url;
-        nativeWebviews.current.set(activeTab.id, webview);
-        await waitForWebview(webview);
-        await webview.setAutoResize(false);
-        if (!cancelled) {
-          await webview.show();
-          await webview.setFocus();
-          setNativeWebviewFailed(false);
-        }
-      } catch (error) {
-        setNativeWebviewFailed(true);
-        const detail = error instanceof Error ? error.message : String(error);
-        showToast("تعذر فتح WebView الأصلي", detail ? detail.slice(0, 180) : "تحقق من صلاحيات WebView وWebView2 في Windows.");
+    const bridge = window.aakil;
+    if (!bridge) return;
+    return bridge.onBrowserEvent((event: BrowserEvent) => {
+      if (event.type === "title" && event.title) {
+        setTabs((current) => current.map((tab) => tab.id === event.tabId ? { ...tab, title: event.title!.slice(0, 40) } : tab));
+        return;
       }
-    };
-    void syncNativeWebview();
-    return () => { cancelled = true; };
-  }, [activeTab.id, activeTab.url, isHome, isTauriRuntime, reloadNonce]);
+      if (event.type === "error") {
+        setNativeWebviewFailed(true);
+        showToast("تعذر تحميل الصفحة", event.message || "حدث خطأ أثناء تحميل الموقع.");
+        return;
+      }
+      if (event.type === "navigated" && event.url && isElectronRuntime) {
+        setNativeWebviewFailed(false);
+        setTabs((current) => current.map((tab) => {
+          if (tab.id !== event.tabId) return tab;
+          const nextHistory = tab.url === event.url ? tab.history : [...tab.history, event.url!];
+          return { ...tab, url: event.url!, title: getTitle(event.url!), domain: getDomain(event.url!), icon: getDomain(event.url!).charAt(0).toUpperCase() || "A", history: nextHistory, historyIndex: nextHistory.length - 1, canGoBack: event.canGoBack, canGoForward: event.canGoForward };
+        }));
+        if (event.tabId === activeId) setAddress(event.url);
+        if (!isPrivate) setHistory((current) => [event.url!, ...current.filter((item) => item !== event.url)].slice(0, 50));
+      }
+    });
+  }, [activeId, isElectronRuntime, isPrivate]);
 
   useEffect(() => {
-    if (!isTauriRuntime) return;
-    const resizeNativeWebview = async () => {
-      const host = nativeHostRef.current;
-      const view = nativeWebviews.current.get(activeTab.id);
-      if (!host || !view || isHome) return;
+    const bridge = window.aakil;
+    const host = nativeHostRef.current;
+    if (!bridge || !host) return;
+    if (isHome) {
+      void bridge.hideTabs();
+      return;
+    }
+    let cancelled = false;
+    const syncNativeView = async () => {
       const rect = host.getBoundingClientRect();
+      const bounds: BrowserBounds = { x: rect.left, y: rect.top, width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
       try {
-        await view.setPosition(new LogicalPosition(rect.left, rect.top));
-        await view.setSize(new LogicalSize(Math.max(1, rect.width), Math.max(1, rect.height)));
-      } catch {
-        // The webview may be closing while a tab is changing.
+        await bridge.showTab(activeTab.id, activeTab.url, bounds);
+        if (!cancelled) setNativeWebviewFailed(false);
+      } catch (error) {
+        if (cancelled) return;
+        setNativeWebviewFailed(true);
+        const detail = error instanceof Error ? error.message : String(error);
+        showToast("تعذر فتح صفحة الويب", detail.slice(0, 180) || "تحقق من اتصال الإنترنت.");
       }
     };
-    window.addEventListener("resize", resizeNativeWebview);
-    void resizeNativeWebview();
-    return () => window.removeEventListener("resize", resizeNativeWebview);
-  }, [activeTab.id, isHome, isTauriRuntime]);
+    void syncNativeView();
+    return () => { cancelled = true; };
+  }, [activeTab.id, activeTab.url, isHome, isElectronRuntime, reloadNonce]);
 
-  useEffect(() => () => {
-    for (const view of nativeWebviews.current.values()) void view.close();
-    nativeWebviews.current.clear();
-  }, []);
+  useEffect(() => {
+    const bridge = window.aakil;
+    if (!bridge || isHome) return;
+    const resizeNativeView = () => {
+      const host = nativeHostRef.current;
+      if (!host) return;
+      const rect = host.getBoundingClientRect();
+      void bridge.setBounds(activeTab.id, { x: rect.left, y: rect.top, width: Math.max(1, rect.width), height: Math.max(1, rect.height) });
+    };
+    window.addEventListener("resize", resizeNativeView);
+    resizeNativeView();
+    return () => window.removeEventListener("resize", resizeNativeView);
+  }, [activeTab.id, isHome]);
 
   const showToast = (title: string, message: string) => {
     setToast({ title, message });
@@ -230,6 +205,10 @@ function App() {
   };
 
   const moveHistory = (direction: -1 | 1) => {
+    if (window.aakil) {
+      void (direction === -1 ? window.aakil.goBack(activeId) : window.aakil.goForward(activeId));
+      return;
+    }
     const nextIndex = activeTab.historyIndex + direction;
     if (nextIndex < 0 || nextIndex >= activeTab.history.length) return;
     const url = activeTab.history[nextIndex];
@@ -257,6 +236,7 @@ function App() {
   };
 
   const closeTab = (id: number) => {
+    void window.aakil?.closeTab(id);
     if (tabs.length === 1) {
       setTabs([{ ...initialTab, id: 1 }]);
       setActiveId(1);
@@ -282,9 +262,10 @@ function App() {
       return;
     }
     try {
-      await openUrl(activeTab.url);
+      if (window.aakil) await window.aakil.openExternal(activeTab.url);
+      else window.open(activeTab.url, "_blank", "noopener,noreferrer");
     } catch {
-      window.open(activeTab.url, "_blank", "noopener,noreferrer");
+      showToast("تعذر فتح المتصفح الخارجي", "يمكنك نسخ الرابط وفتحه يدويًا.");
     }
   };
 
@@ -395,9 +376,9 @@ function App() {
 
           <div className="toolbar-row">
             <div className="navigation-controls">
-              <button className="tool-button muted" onClick={() => moveHistory(-1)} disabled={activeTab.historyIndex === 0} aria-label="رجوع">‹</button>
-              <button className="tool-button muted" onClick={() => moveHistory(1)} disabled={activeTab.historyIndex === activeTab.history.length - 1} aria-label="تقدم">›</button>
-              <button className="tool-button" onClick={() => setReloadNonce((current) => current + 1)} aria-label="إعادة تحميل">↻</button>
+              <button className="tool-button muted" onClick={() => moveHistory(-1)} disabled={isElectronRuntime ? activeTab.canGoBack !== true : activeTab.historyIndex === 0} aria-label="رجوع">‹</button>
+              <button className="tool-button muted" onClick={() => moveHistory(1)} disabled={isElectronRuntime ? activeTab.canGoForward !== true : activeTab.historyIndex === activeTab.history.length - 1} aria-label="تقدم">›</button>
+              <button className="tool-button" onClick={() => { if (window.aakil) void window.aakil.reload(activeId); else setReloadNonce((current) => current + 1); }} aria-label="إعادة تحميل">↻</button>
             </div>
             <form className="address-bar" onSubmit={handleAddressSubmit}>
               <span className="address-lock">⌑</span>
@@ -447,15 +428,13 @@ function App() {
             </div>
           ) : (
             <div className="remote-page">
-              <div className="remote-page-header"><div className="site-badge">{activeTab.icon}</div><div><strong>{activeTab.domain}</strong><span>{isTauriRuntime && !nativeWebviewFailed ? "WebView أصلي داخل AAKIL" : "معاينة ويب"}</span></div><button className="secondary-button" onClick={openExternal}>فتح خارجيًا ↗</button></div>
-              {isTauriRuntime && !nativeWebviewFailed ? (
+              <div className="remote-page-header"><div className="site-badge">{activeTab.icon}</div><div><strong>{activeTab.domain}</strong><span>{isElectronRuntime && !nativeWebviewFailed ? "Chromium أصلي داخل AAKIL" : "مساحة التصفح"}</span></div><button className="secondary-button" onClick={openExternal}>فتح خارجيًا ↗</button></div>
+              {isElectronRuntime && !nativeWebviewFailed ? (
                 <div className="native-webview-host" ref={nativeHostRef} aria-label="مساحة صفحة الويب" />
-              ) : nativeWebviewFailed ? (
-                <div className="native-error"><div className="native-error-icon">!</div><h2>تعذر إنشاء مساحة التصفح</h2><p>لم يكتمل تشغيل WebView الأصلي. يمكنك فتح الموقع خارجيًا، أو تحديث AAKIL إلى النسخة التي تتضمن صلاحيات WebView.</p><button className="secondary-button" onClick={openExternal}>فتح الموقع خارجيًا ↗</button></div>
               ) : (
-                <iframe key={`${activeTab.id}-${activeTab.url}-${reloadNonce}`} title={activeTab.title} src={activeTab.url} referrerPolicy="no-referrer" />
+                <div className="native-error"><div className="native-error-icon">!</div><h2>تعذر إنشاء مساحة التصفح</h2><p>لم يتم تشغيل محرك Chromium داخل AAKIL. يمكنك فتح الموقع خارجيًا، أو إرسال تفاصيل الإشعار الظاهر أعلى النافذة.</p><button className="secondary-button" onClick={openExternal}>فتح الموقع خارجيًا ↗</button></div>
               )}
-              <div className="remote-note">تُستخدم مساحة WebView الأصلية على Windows لتجنب رفض المواقع داخل iframe. زر «فتح خارجيًا» يبقى متاحًا دائمًا.</div>
+              <div className="remote-note">تُعرض صفحات الويب عبر Chromium داخل التطبيق، وليس عبر iframe. زر «فتح خارجيًا» يبقى متاحًا دائمًا.</div>
             </div>
           )}
         </section>

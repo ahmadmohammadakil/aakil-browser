@@ -10,9 +10,9 @@ permissions:
 
 jobs:
   windows:
-    name: Build Windows installer
+    name: Build Electron Windows installer
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -30,29 +30,24 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable-x86_64-pc-windows-msvc
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build AAKIL installer
-        run: pnpm tauri build
+      - name: Build AAKIL Electron installer
+        run: pnpm electron:dist
 
-      - name: Upload EXE installer
+      - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: AAKIL-Windows-x64-EXE
-          path: src-tauri/target/release/bundle/nsis/*.exe
+          name: AAKIL-Windows-x64-Electron-Installer
+          path: release/AAKIL-*-Windows-x64-setup.exe
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload MSI installer
+      - name: Upload unpacked application for diagnostics
         uses: actions/upload-artifact@v4
         with:
-          name: AAKIL-Windows-x64-MSI
-          path: src-tauri/target/release/bundle/msi/*.msi
+          name: AAKIL-Windows-x64-Electron-unpacked
+          path: release/win-unpacked/**
           if-no-files-found: warn
           retention-days: 30
