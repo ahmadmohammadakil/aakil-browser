@@ -172,9 +172,10 @@ function App() {
           await webview.setFocus();
           setNativeWebviewFailed(false);
         }
-      } catch {
+      } catch (error) {
         setNativeWebviewFailed(true);
-        showToast("تعذر فتح WebView الأصلي", "استخدم فتح خارجيًا أو تحقق من صلاحيات WebView في النسخة المثبتة.");
+        const detail = error instanceof Error ? error.message : String(error);
+        showToast("تعذر فتح WebView الأصلي", detail ? detail.slice(0, 180) : "تحقق من صلاحيات WebView وWebView2 في Windows.");
       }
     };
     void syncNativeWebview();
@@ -442,7 +443,7 @@ function App() {
                   <button className="quick-card add-card" onClick={() => showToast("اختصار جديد", "يمكن تخصيص اختصاراتك قريبًا.")}><span className="add-icon">+</span><span><strong>إضافة اختصار</strong><small>موقعك المفضل</small></span></button>
                 </div>
               </div>
-              <div className="home-footer"><span><span className="footer-shield">✓</span> خصوصيتك أولًا</span><span>الإصدار 0.1.0</span></div>
+              <div className="home-footer"><span><span className="footer-shield">✓</span> خصوصيتك أولًا</span><span>الإصدار 0.1.2</span></div>
             </div>
           ) : (
             <div className="remote-page">

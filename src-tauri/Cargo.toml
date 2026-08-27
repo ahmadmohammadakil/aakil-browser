@@ -1,6 +1,6 @@
 [package]
 name = "aakil"
-version = "0.1.0"
+version = "0.1.2"
 description = "AAKIL private browser with an optional VPN adapter"
 authors = ["AAKIL"]
 edition = "2021"
