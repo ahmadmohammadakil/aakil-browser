@@ -1,6 +1,6 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, shell, session } = require("electron");
 const path = require("node:path");
-const isDev = !app.isPackaged;
+const isDev = !app.isPackaged && process.env.AAKIL_DEV !== "0";
 const devServerUrl = process.env.ELECTRON_START_URL || "http://localhost:1420";
 let mainWindow = null;
 const browserViews = new Map();

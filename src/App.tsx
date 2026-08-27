@@ -424,7 +424,7 @@ function App() {
                   <button className="quick-card add-card" onClick={() => showToast("اختصار جديد", "يمكن تخصيص اختصاراتك قريبًا.")}><span className="add-icon">+</span><span><strong>إضافة اختصار</strong><small>موقعك المفضل</small></span></button>
                 </div>
               </div>
-              <div className="home-footer"><span><span className="footer-shield">✓</span> خصوصيتك أولًا</span><span>الإصدار 0.2.1</span></div>
+              <div className="home-footer"><span><span className="footer-shield">✓</span> خصوصيتك أولًا</span><span>الإصدار 0.2.2</span></div>
             </div>
           ) : (
             <div className="remote-page">
