@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { Webview } from "@tauri-apps/api/webview";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import "./App.css";
 
 type Tab = {
@@ -73,11 +76,16 @@ function App() {
     }
   });
   const [toast, setToast] = useState<Toast | null>(null);
+  const [nativeWebviewFailed, setNativeWebviewFailed] = useState(false);
+  const nativeHostRef = useRef<HTMLDivElement>(null);
+  const nativeWebviews = useRef<Map<number, Webview>>(new Map());
+  const isTauriRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeId) || tabs[0],
     [activeId, tabs],
   );
+  const isHome = activeTab.url === "aakil://home";
 
   useEffect(() => {
     setAddress(activeTab.url === "aakil://home" ? "" : activeTab.url);
@@ -92,6 +100,79 @@ function App() {
     const timer = window.setTimeout(() => setToast(null), 3600);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!isTauriRuntime || isHome) return;
+    let cancelled = false;
+    const syncNativeWebview = async () => {
+      const host = nativeHostRef.current;
+      if (!host) return;
+      try {
+        const current = nativeWebviews.current.get(activeTab.id);
+        for (const [id, view] of nativeWebviews.current) {
+          if (id !== activeTab.id) await view.hide();
+        }
+
+        const currentUrl = (current as (Webview & { aakilUrl?: string }) | undefined)?.aakilUrl;
+        if (current && currentUrl === activeTab.url && !cancelled) {
+          await current.show();
+          await current.setFocus();
+          return;
+        }
+
+        if (current) {
+          await current.close();
+          nativeWebviews.current.delete(activeTab.id);
+        }
+
+        const rect = host.getBoundingClientRect();
+        const webview = new Webview(getCurrentWebviewWindow(), `tab-${activeTab.id}`, {
+          url: activeTab.url,
+          x: rect.left,
+          y: rect.top,
+          width: Math.max(1, rect.width),
+          height: Math.max(1, rect.height),
+        });
+        (webview as Webview & { aakilUrl?: string }).aakilUrl = activeTab.url;
+        nativeWebviews.current.set(activeTab.id, webview);
+        await webview.setAutoResize(false);
+        if (!cancelled) {
+          await webview.show();
+          await webview.setFocus();
+          setNativeWebviewFailed(false);
+        }
+      } catch {
+        setNativeWebviewFailed(true);
+        showToast("تعذر فتح WebView الأصلي", "استخدم فتح خارجيًا أو تحقق من صلاحيات WebView في النسخة المثبتة.");
+      }
+    };
+    void syncNativeWebview();
+    return () => { cancelled = true; };
+  }, [activeTab.id, activeTab.url, isHome, isTauriRuntime, reloadNonce]);
+
+  useEffect(() => {
+    if (!isTauriRuntime) return;
+    const resizeNativeWebview = async () => {
+      const host = nativeHostRef.current;
+      const view = nativeWebviews.current.get(activeTab.id);
+      if (!host || !view || isHome) return;
+      const rect = host.getBoundingClientRect();
+      try {
+        await view.setPosition(new LogicalPosition(rect.left, rect.top));
+        await view.setSize(new LogicalSize(Math.max(1, rect.width), Math.max(1, rect.height)));
+      } catch {
+        // The webview may be closing while a tab is changing.
+      }
+    };
+    window.addEventListener("resize", resizeNativeWebview);
+    void resizeNativeWebview();
+    return () => window.removeEventListener("resize", resizeNativeWebview);
+  }, [activeTab.id, isHome, isTauriRuntime]);
+
+  useEffect(() => () => {
+    for (const view of nativeWebviews.current.values()) void view.close();
+    nativeWebviews.current.clear();
+  }, []);
 
   const showToast = (title: string, message: string) => {
     setToast({ title, message });
@@ -174,8 +255,6 @@ function App() {
       window.open(activeTab.url, "_blank", "noopener,noreferrer");
     }
   };
-
-  const isHome = activeTab.url === "aakil://home";
 
   return (
     <div className={`app-shell ${isSidebarOpen ? "sidebar-open" : "sidebar-closed"}`} dir="rtl">
@@ -332,9 +411,15 @@ function App() {
             </div>
           ) : (
             <div className="remote-page">
-              <div className="remote-page-header"><div className="site-badge">{activeTab.icon}</div><div><strong>{activeTab.domain}</strong><span>محتوى الويب داخل مساحة AAKIL</span></div><button className="secondary-button" onClick={openExternal}>فتح خارجيًا ↗</button></div>
-              <iframe key={`${activeTab.id}-${activeTab.url}-${reloadNonce}`} title={activeTab.title} src={activeTab.url} referrerPolicy="no-referrer" />
-              <div className="remote-note">إذا رفض الموقع العرض داخل إطار آمن، استخدم زر «فتح خارجيًا» لمتابعة الصفحة في المتصفح الافتراضي.</div>
+              <div className="remote-page-header"><div className="site-badge">{activeTab.icon}</div><div><strong>{activeTab.domain}</strong><span>{isTauriRuntime && !nativeWebviewFailed ? "WebView أصلي داخل AAKIL" : "معاينة ويب"}</span></div><button className="secondary-button" onClick={openExternal}>فتح خارجيًا ↗</button></div>
+              {isTauriRuntime && !nativeWebviewFailed ? (
+                <div className="native-webview-host" ref={nativeHostRef} aria-label="مساحة صفحة الويب" />
+              ) : nativeWebviewFailed ? (
+                <div className="native-error"><div className="native-error-icon">!</div><h2>تعذر إنشاء مساحة التصفح</h2><p>لم يكتمل تشغيل WebView الأصلي. يمكنك فتح الموقع خارجيًا، أو تحديث AAKIL إلى النسخة التي تتضمن صلاحيات WebView.</p><button className="secondary-button" onClick={openExternal}>فتح الموقع خارجيًا ↗</button></div>
+              ) : (
+                <iframe key={`${activeTab.id}-${activeTab.url}-${reloadNonce}`} title={activeTab.title} src={activeTab.url} referrerPolicy="no-referrer" />
+              )}
+              <div className="remote-note">تُستخدم مساحة WebView الأصلية على Windows لتجنب رفض المواقع داخل iframe. زر «فتح خارجيًا» يبقى متاحًا دائمًا.</div>
             </div>
           )}
         </section>

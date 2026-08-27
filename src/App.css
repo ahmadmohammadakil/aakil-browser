@@ -179,7 +179,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cyan); outl
 .remote-page-header strong { color: #dce8f1; font-family: "Space Grotesk", sans-serif; font-size: 12px; direction: ltr; text-align: right; }
 .remote-page-header span { color: #758497; font-size: 10px; }
 .remote-page-header .secondary-button { margin-right: auto; }
-.remote-page iframe { width: 100%; min-height: 580px; flex: 1; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.remote-page iframe, .native-webview-host { width: 100%; min-height: 580px; flex: 1; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.native-webview-host { position: relative; overflow: hidden; box-shadow: 0 15px 36px rgba(0,0,0,.12); }
+.native-error { min-height: 580px; flex: 1; display: grid; place-items: center; align-content: center; gap: 10px; padding: 34px; color: #9caabd; background: #171e28; border: 1px solid var(--line); border-radius: 12px; text-align: center; }
+.native-error-icon { width: 42px; height: 42px; display: grid; place-items: center; color: #17232e; background: var(--gold); border-radius: 50%; font-family: "Space Grotesk", sans-serif; font-size: 22px; font-weight: 700; }
+.native-error h2 { margin: 0; color: #dce7f1; font-size: 17px; font-weight: 600; }
+.native-error p { max-width: 430px; margin: 0 0 8px; color: #7f8da1; font-size: 11px; line-height: 1.8; }
 .remote-note { width: 100%; max-width: 960px; margin: 10px auto 0; color: #68788c; font-size: 9px; text-align: center; }
 
 .modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(4, 8, 13, .72); backdrop-filter: blur(7px); }
@@ -241,5 +246,5 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cyan); outl
   .vpn-panel-copy span { white-space: normal; }
   .vpn-panel .secondary-button { display: none; }
   .remote-page { padding-inline: 12px; }
-  .remote-page iframe { min-height: 500px; }
+  .remote-page iframe, .native-webview-host, .native-error { min-height: 500px; }
 }
