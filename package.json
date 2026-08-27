@@ -19,6 +19,7 @@
   "build": {
     "appId": "com.aakil.browser",
     "productName": "AAKIL",
+    "icon": "build/icon.ico",
     "asar": true,
     "files": [
       "dist/**/*",
